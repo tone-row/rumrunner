@@ -40,6 +40,12 @@ const loadWebPageV2 = cache<string>("loadWebPage:1", async ({ url }) => {
 });
 ```
 
+## Shell Environment
+
+- Uses zsh with interactive mode to ensure shell aliases and PATH are loaded
+- Commands that need shell features should use `zsh -ic "command"`
+- Preserves environment variables when spawning processes
+
 ## Environment Variables
 
 - Place API keys and other secrets in `~/.rumrunner`

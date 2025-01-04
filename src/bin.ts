@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 import tempDir from "temp-dir";
 import { join } from "path";
-import { existsSync, readFileSync, writeFileSync } from "fs";
+import { existsSync, readFileSync } from "fs";
 import { homedir } from "os";
 import { initialScript } from "./helpers";
 
@@ -102,27 +102,28 @@ console.log("Has global Playwright installation:", hasPlaywright);
 
 // Open VS Code and change directory
 try {
-  // Change to the new directory first
-  process.chdir(uniqueTempDir);
-  console.log(`\nChanged directory to: ${uniqueTempDir}`);
-  
-  // Open VS Code (or Cursor if aliased)
-  await Bun.spawn(["code", "index.ts"], {
+  // Open VS Code (or Cursor if aliased) from the specific directory
+  await Bun.spawn(["zsh", "-ic", "code ."], {
     stdout: "inherit",
-    stderr: "inherit"
+    stderr: "inherit",
+    env: process.env,
+    cwd: uniqueTempDir, // Explicitly set working directory for the spawned process
   });
+
+  // Copy commands to clipboard
+  const commands = `cd ${uniqueTempDir}\nbun run --watch index.ts`;
+  await import("clipboardy").then((clipboardy) =>
+    clipboardy.default.writeSync(commands)
+  );
 
   // Print helpful next steps
   console.log(`
 🎉 Setup complete! Your new rumrunner project is ready.
 
-To get started, run:
-  bun run --watch index.ts
-
+The startup commands have been copied to your clipboard! Just paste them in your terminal.
 The index.ts file has been opened in your editor.
 Remember to check the DEBUG environment variable in ~/.rumrunner if you need more detailed logging.
 `);
-
 } catch (error) {
   console.error("Error setting up workspace:", error);
 }
