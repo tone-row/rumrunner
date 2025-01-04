@@ -1,0 +1,60 @@
+// This file is an example of what using the library might look like
+import { cache } from "rumrunner";
+import { chromium } from "@playwright/test";
+
+// Load environment variables using Bun's built-in support
+const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+
+const urls = [
+  "https://saaslandingpage.com/framer/",
+  "https://saaslandingpage.com/keel/",
+  "https://saaslandingpage.com/aria/",
+  "https://saaslandingpage.com/peek-insights/",
+  "https://saaslandingpage.com/attio/",
+  "https://saaslandingpage.com/loops/",
+  "https://saaslandingpage.com/stacker/",
+];
+
+// Load html with playwright
+const loadHtml = cache<string>("loadHtml:0", async (url: string) => {
+  const browser = await chromium.launch({
+    headless: true, // Set to false to see the browser in action
+  });
+  const page = await browser.newPage();
+  await page.goto(url);
+  const content = await page.content();
+  await browser.close();
+  return content;
+});
+
+// Example usage
+async function main() {
+  try {
+    // Load first URL as an example
+    const html = await loadHtml(urls[0]);
+    console.log(`Successfully loaded ${urls[0]}`);
+    console.log(`HTML length: ${html.length} characters`);
+    
+    // Example of cache in action - second call will be instant
+    console.log('\nTesting cache...');
+    const cachedHtml = await loadHtml(urls[0]);
+    console.log(`Cached load successful, length: ${cachedHtml.length} characters`);
+    
+  } catch (error) {
+    console.error('Error:', error);
+  }
+}
+
+main();
+
+// Example of checking for API keys
+if (!ANTHROPIC_API_KEY && !OPENAI_API_KEY) {
+  console.warn(`
+No API keys found in environment.
+To use AI functionality, create a ~/.rumrunner file with your API keys:
+
+ANTHROPIC_API_KEY=your_key_here
+OPENAI_API_KEY=your_key_here
+`);
+}

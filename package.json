@@ -1,11 +1,26 @@
 {
   "name": "rumrunner",
-  "module": "index.ts",
+  "version": "0.1.0",
+  "module": "src/index.ts",
   "type": "module",
+  "bin": {
+    "rumrunner": "./src/bin.ts"
+  },
+  "files": [
+    "src"
+  ],
+  "exports": {
+    ".": {
+      "import": "./src/index.ts"
+    }
+  },
   "devDependencies": {
-    "@types/bun": "latest"
+    "@types/bun": "^1.1.14"
   },
   "peerDependencies": {
     "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "temp-dir": "^3.0.0"
   }
 }
