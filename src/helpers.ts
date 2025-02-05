@@ -1,10 +1,15 @@
-export const initialScript = `import { cache } from "rumrunner";
+export const initialScript = `import { FileSQLiteCache } from "rumrunner";
 import { chromium } from "@playwright/test";
-import { anthropic } from "@ai-sdk/anthropic";
-import { generateObject } from "ai";
+import OpenRouter from "@openrouter/api";
 import { z } from "zod";
 
-const loadHTML = cache("loadHTML:0", async (url: string) => {
+// Initialize cache and AI client
+const cache = new FileSQLiteCache("./cache.db");
+const openrouter = new OpenRouter({
+  apiKey: process.env.OPENROUTER_API_KEY,
+});
+
+const loadHTML = cache.wrap("loadHTML:0", async (url: string) => {
   const browser = await chromium.launch();
   const page = await browser.newPage();
   await page.goto(url);
@@ -15,16 +20,23 @@ const loadHTML = cache("loadHTML:0", async (url: string) => {
 
 const google = await loadHTML("https://google.com");
 
-const getPageTitle = cache("getPageTitle:1", async (html: string) => {
-  const { object } = await generateObject({
-    model: anthropic("claude-3-5-sonnet-20240620"),
-    schema: z.object({
-      title: z.string(),
-    }),
-    prompt: \`Extract the title of the page from the following HTML: \${html}\`,
+const getPageTitle = cache.wrap("getPageTitle:0", async (html: string) => {
+  const completion = await openrouter.chat.completions.create({
+    model: "anthropic/claude-3-sonnet-20240229",
+    messages: [
+      {
+        role: "user",
+        content: \`Extract the title of the page from the following HTML: \${html}\`,
+      },
+    ],
+    response_format: { type: "json_object" },
   });
 
-  return object.title;
+  const result = z.object({
+    title: z.string(),
+  }).parse(JSON.parse(completion.choices[0].message.content || "{}"));
+
+  return result.title;
 });
 
 const title = await getPageTitle(google);

@@ -1,7 +1,6 @@
 #!/usr/bin/env bun
-import tempDir from "temp-dir";
 import { join } from "path";
-import { existsSync, readFileSync } from "fs";
+import { existsSync, readFileSync, mkdirSync } from "fs";
 import { homedir } from "os";
 import { initialScript } from "./helpers";
 
@@ -14,6 +13,7 @@ const REQUIRED_PACKAGES = [
   "zod",
   "@ai-sdk/anthropic",
   "@ai-sdk/openai",
+  "@ai-sdk/openrouter",
 ];
 
 async function checkPlaywright() {
@@ -31,22 +31,36 @@ async function checkPlaywright() {
   }
 }
 
-// Create unique temp directory name
-const uniqueTempDir = join(tempDir, `rumrunner-${Date.now()}`);
-console.log("Created temp directory:", uniqueTempDir);
+// Get project name from arguments
+const projectName = process.argv[2];
+if (!projectName) {
+  console.error("Error: Project name is required");
+  console.error("Usage: rumrunner <project-name>");
+  process.exit(1);
+}
+
+// Create project directory in current working directory
+const projectDir = join(process.cwd(), projectName);
+if (existsSync(projectDir)) {
+  console.error(`Error: Directory '${projectName}' already exists`);
+  process.exit(1);
+}
+
+mkdirSync(projectDir);
+console.log("Created project directory:", projectDir);
 
 // Create package.json
 const packageJson = {
-  name: "rumrunner-app",
+  name: projectName,
   version: "1.0.0",
   dependencies: {
     rumrunner: "link:rumrunner",
   },
 };
 
-// Write package.json to temp directory
+// Write package.json to project directory
 await Bun.write(
-  join(uniqueTempDir, "package.json"),
+  join(projectDir, "package.json"),
   JSON.stringify(packageJson, null, 2)
 );
 
@@ -66,19 +80,16 @@ const tsConfig = {
 };
 
 await Bun.write(
-  join(uniqueTempDir, "tsconfig.json"),
+  join(projectDir, "tsconfig.json"),
   JSON.stringify(tsConfig, null, 2)
 );
-
-// Create empty cache.json
-await Bun.write(join(uniqueTempDir, "cache.json"), JSON.stringify({}, null, 2));
 
 // Copy .rumrunner from home directory to .env if it exists
 const rumrunnerPath = join(homedir(), ".rumrunner");
 if (existsSync(rumrunnerPath)) {
   try {
     const envContent = readFileSync(rumrunnerPath, "utf-8");
-    await Bun.write(join(uniqueTempDir, ".env"), envContent);
+    await Bun.write(join(projectDir, ".env"), envContent);
     console.log("Copied .rumrunner configuration to .env");
   } catch (error) {
     console.error("Error copying .rumrunner configuration:", error);
@@ -86,14 +97,14 @@ if (existsSync(rumrunnerPath)) {
 }
 
 // Create index.ts with sample comment
-await Bun.write(join(uniqueTempDir, "index.ts"), initialScript);
+await Bun.write(join(projectDir, "index.ts"), initialScript);
 
 // Install required packages
 const installCommand = ["bun", "install", ...REQUIRED_PACKAGES];
 const installResult = await Bun.spawn(installCommand, {
   stdout: "inherit",
   stderr: "inherit",
-  cwd: uniqueTempDir,
+  cwd: projectDir,
 });
 
 // Main CLI execution
@@ -107,18 +118,18 @@ try {
     stdout: "inherit",
     stderr: "inherit",
     env: process.env,
-    cwd: uniqueTempDir, // Explicitly set working directory for the spawned process
+    cwd: projectDir,
   });
 
   // Copy commands to clipboard
-  const commands = `cd ${uniqueTempDir}\nbun run --watch index.ts`;
+  const commands = `cd ${projectDir}\nbun run --watch index.ts`;
   await import("clipboardy").then((clipboardy) =>
     clipboardy.default.writeSync(commands)
   );
 
   // Print helpful next steps
   console.log(`
-🎉 Setup complete! Your new rumrunner project is ready.
+🎉 Setup complete! Your new rumrunner project '${projectName}' is ready.
 
 The startup commands have been copied to your clipboard! Just paste them in your terminal.
 The index.ts file has been opened in your editor.
@@ -126,4 +137,5 @@ Remember to check the DEBUG environment variable in ~/.rumrunner if you need mor
 `);
 } catch (error) {
   console.error("Error setting up workspace:", error);
+  process.exit(1);
 }
