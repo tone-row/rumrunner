@@ -13,7 +13,8 @@ const REQUIRED_PACKAGES = [
   "zod",
   "@ai-sdk/anthropic",
   "@ai-sdk/openai",
-  "@ai-sdk/openrouter",
+  "@openrouter/ai-sdk-provider",
+  "ollama-ai-provider",
 ];
 
 async function checkPlaywright() {

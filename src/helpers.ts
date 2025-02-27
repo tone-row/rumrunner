@@ -1,11 +1,20 @@
 export const initialScript = `import { FileSQLiteCache } from "rumrunner";
 import { chromium } from "@playwright/test";
-import OpenRouter from "@openrouter/api";
+import { generateObject } from "ai";
+import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { z } from "zod";
+import { createOllama } from 'ollama-ai-provider';
 
-// Initialize cache and AI client
+const ollama = createOllama({
+  // optional settings, e.g.
+  baseURL: 'https://api.ollama.com',
+});
+
+// Initialize Cache
 const cache = new FileSQLiteCache("./cache.db");
-const openrouter = new OpenRouter({
+
+// Initialize OpenRouter client
+const openrouter = createOpenRouter({
   apiKey: process.env.OPENROUTER_API_KEY,
 });
 
@@ -18,27 +27,25 @@ const loadHTML = cache.wrap("loadHTML:0", async (url: string) => {
   return html;
 });
 
-const google = await loadHTML("https://google.com");
 
 const getPageTitle = cache.wrap("getPageTitle:0", async (html: string) => {
-  const completion = await openrouter.chat.completions.create({
-    model: "anthropic/claude-3-sonnet-20240229",
+  const { object } = await generateObject({
+    model: openrouter("claude-3-5-sonnet-latest"),
+    schema: z.object({
+      title: z.string(),
+    }),
     messages: [
       {
         role: "user",
         content: \`Extract the title of the page from the following HTML: \${html}\`,
       },
     ],
-    response_format: { type: "json_object" },
   });
 
-  const result = z.object({
-    title: z.string(),
-  }).parse(JSON.parse(completion.choices[0].message.content || "{}"));
-
-  return result.title;
+  return object.title;
 });
 
+const google = await loadHTML("https://google.com");
 const title = await getPageTitle(google);
 
 console.log(title);`;
