@@ -163,4 +163,32 @@ export class FileSQLiteCache implements ICache {
       return result;
     };
   }
+
+  async getAllEntries(): Promise<
+    Record<string, Array<{ args: any; value: any; created_at: number }>>
+  > {
+    await this.initialized;
+    const stmt = this.db.prepare(
+      "SELECT cache_key, args_key, value, created_at FROM cache_entries"
+    );
+    const rows = stmt.all() as Array<{
+      cache_key: string;
+      args_key: string;
+      value: string;
+      created_at: number;
+    }>;
+    const result: Record<
+      string,
+      Array<{ args: any; value: any; created_at: number }>
+    > = {};
+    for (const row of rows) {
+      if (!result[row.cache_key]) result[row.cache_key] = [];
+      result[row.cache_key].push({
+        args: JSON.parse(row.args_key),
+        value: JSON.parse(row.value),
+        created_at: row.created_at,
+      });
+    }
+    return result;
+  }
 }

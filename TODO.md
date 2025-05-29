@@ -1,0 +1,5 @@
+- [x] Test our cli script
+- [x] Update our starter file to use our `product` function in a more obvious way. Comment out the scraping and llm functions
+- [ ] Setup tailwind so we can properly style stuff and/or compile it down to css that we load or put directly on the page
+- [ ] We also need our interface to watch for changes
+- [ ] We need a way to not run functions unless we say "run functions" in our interface
