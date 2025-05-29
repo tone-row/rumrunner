@@ -1,74 +1,66 @@
 # Rumrunner Knowledge
 
-## Caching
+## Core Value
 
-- Uses a higher-order function pattern for caching function results
-- Cache key is based on stringified function arguments
-- Logs cache hits and misses
-- Works with sync and async functions
-- Requires named caches with a colon (e.g. "myCache:0")
-- Supports TypeScript generics for better type safety
-- Persists cache to cache.json in project root
-- Version-based cache invalidation using colon notation
+Rumrunner is a toolkit for efficiently running, caching, and exploring function evaluations over large parameter spaces (cartesian products). It is designed to help users:
+- Systematically explore function behavior across many input combinations
+- Avoid redundant computation by caching results tied to input parameters
+- Easily re-run or invalidate results when logic changes
+- (Planned) Rank and qualify results, and explore them in a UI
+
+## Cartesian Product Expansion
+
+- Use the `product` utility to generate all combinations of named parameter sets
+- Enables parameter sweeps and large-scale evaluation grids
+
+## Function Caching
+
+- Use `SingleJsonCache` (file-based) or `FileSQLiteCache` (SQLite-based) for caching function results
+- Cache keys are based on function name, version, and stringified arguments
+- Supports both sync and async functions
+- Version-based cache invalidation: increment the version in your cache key to invalidate old results
 - Automatically cleans up old cache versions
+- Type-safe function wrapping for reliable usage
 
 ## Example Usage
 ```typescript
-import { cache } from "rumrunner";
+import { product, FileSQLiteCache } from "rumrunner";
 
-// Simple sync function
-const randomNumber = cache("randomNumber:0", () => Math.random());
+const cache = new FileSQLiteCache("./cache.db");
+const combos = product({ color: new Set(["red", "blue"]), size: new Set(["S", "M"]) });
 
-// Typed sync function
-const hello = cache<string>("hello:0", (name: string) => `Hello, ${name}!`);
+async function expensiveEval({ color, size }: { color: string; size: string }) {
+  // ...expensive computation...
+  return `${color}-${size}`;
+}
 
-// Async function with complex input
-const loadWebPage = cache<string>("loadWebPage:0", async ({ url }: { url: string }) => {
-  const response = await fetch(url);
-  return response.text();
-});
+const cachedEval = cache.wrap<string, [{ color: string; size: string }]>(
+  "eval:1",
+  expensiveEval
+);
 
-// Usage
-await loadWebPage({ url: "https://example.com" }); // Cache miss, writes to cache.json
-await loadWebPage({ url: "https://example.com" }); // Cache hit from cache.json
-
-// To invalidate cache, increment version number
-const loadWebPageV2 = cache<string>("loadWebPage:1", async ({ url }) => {
-  // New version automatically cleans up loadWebPage:0 entries
-  const response = await fetch(url);
-  return response.text();
-});
+for (const params of combos) {
+  const result = await cachedEval(params);
+  console.log(params, result);
+}
 ```
 
-## Shell Environment
+## Planned Features
 
-- Uses zsh with interactive mode to ensure shell aliases and PATH are loaded
-- Commands that need shell features should use `zsh -ic "command"`
-- Preserves environment variables when spawning processes
+- Ranking and qualification of results (e.g., best/worst, pass/fail)
+- UI for exploring, filtering, and re-running evaluations
+- Manual cache-busting and control over which functions are re-run
 
 ## Environment Variables
 
-- Place API keys and other secrets in `~/.rumrunner`
-- Set DEBUG=true to enable debug logging
-- CLI automatically copies `~/.rumrunner` to `.env` in new projects
-- Uses Bun's built-in environment variable support
+- Set `DEBUG=true` to enable detailed cache logging
 - `.env` is automatically gitignored
-
-Example ~/.rumrunner file:
-```
-ANTHROPIC_API_KEY=your_key_here
-OPENAI_API_KEY=your_key_here
-DEBUG=true
-```
 
 ## Cache File Structure
 ```json
 {
-  "hello:0": {
-    "[\"World\"]": "Hello, World!"
-  },
-  "loadWebPage:1": {
-    "[{\"url\":\"https://example.com\"}]": "<!DOCTYPE html>..."
+  "eval:1": {
+    "[{\"color\":\"red\",\"size\":\"S\"}]": "red-S"
   }
 }
 ```

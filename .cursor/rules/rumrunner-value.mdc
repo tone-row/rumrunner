@@ -1,0 +1,22 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# Rumrunner Project Value and Aim
+
+Rumrunner is a toolkit for efficiently running, caching, and exploring function evaluations over large parameter spaces (cartesian products). Its core value is to help users:
+
+- Systematically explore the behavior of functions across many input combinations
+- Avoid redundant computation by caching results tied to input parameters and function version
+- Easily re-run or invalidate results when logic changes
+- (Planned) Rank and qualify results, and explore them in a UI
+
+The main features are:
+- Cartesian product expansion for parameter sweeps ([src/product.ts](mdc:src/product.ts))
+- Multiple caching backends for function results ([src/cache/json-cache.ts](mdc:src/cache/json-cache.ts), [src/cache/file-sqlite-cache.ts](mdc:src/cache/file-sqlite-cache.ts))
+- Type-safe function wrapping and version-based cache invalidation
+- (Planned) Ranking and qualification of results
+- (Planned) UI for exploring, filtering, and re-running evaluations
+
+Rumrunner is designed to make large-scale, repeatable, and explorable function evaluation easy and efficient for users who need to analyze or optimize code, models, or algorithms across many scenarios.

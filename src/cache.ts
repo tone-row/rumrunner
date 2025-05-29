@@ -1,3 +1,5 @@
+// DEPRECATED: Use src/cache/json-cache.ts or src/cache/file-sqlite-cache.ts instead. This file will be removed in a future version.
+
 import { join } from "path";
 import { readFileSync, writeFileSync, existsSync } from "fs";
 
