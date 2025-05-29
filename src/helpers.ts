@@ -1,4 +1,4 @@
-export const initialScript = `import { FileSQLiteCache, product } from "rumrunner";
+export const initialScript = `import { FileSQLiteCache, product, rumrunnerServer } from "rumrunner";
 // import { chromium } from "@playwright/test";
 // import { generateObject } from "ai";
 // import { createOpenRouter } from "@openrouter/ai-sdk-provider";
@@ -28,6 +28,8 @@ const cowSay = cache.wrap("cowSay:0", async (name, greeting) => {
     console.log(cow);
   }
 })();
+
+export default rumrunnerServer();
 
 // --- Advanced: Scraping and LLM (uncomment to use) ---
 // const openrouter = createOpenRouter({

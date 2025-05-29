@@ -7,6 +7,20 @@ function debug(...args: any[]) {
   }
 }
 
+export type JobStatus = "pending" | "complete" | "error";
+
+export interface QueueEntry<Args extends any[] = any[], T = any> {
+  id: number;
+  cache_key: string;
+  args_key: string;
+  args: Args;
+  status: JobStatus;
+  result?: T;
+  error?: string;
+  created_at: number;
+  updated_at: number;
+}
+
 export class FileSQLiteCache implements ICache {
   private db: Database;
   private initialized: Promise<void>;
@@ -36,6 +50,20 @@ export class FileSQLiteCache implements ICache {
     this.db.run(`
       CREATE INDEX IF NOT EXISTS idx_cache_key 
       ON cache_entries(cache_key)
+    `);
+
+    // Add a table for queued jobs
+    this.db.run(`
+      CREATE TABLE IF NOT EXISTS queue_entries (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        cache_key TEXT NOT NULL,
+        args_key TEXT NOT NULL,
+        status TEXT NOT NULL,
+        result TEXT,
+        error TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      )
     `);
   }
 
@@ -190,5 +218,102 @@ export class FileSQLiteCache implements ICache {
       });
     }
     return result;
+  }
+
+  /**
+   * Queue a job for later execution
+   */
+  async queueJob<Args extends any[]>(
+    cacheKey: string,
+    args: Args
+  ): Promise<void> {
+    await this.initialized;
+    const argsKey = JSON.stringify(args);
+    const now = Date.now();
+    const stmt = this.db.prepare(`
+      INSERT INTO queue_entries (cache_key, args_key, status, created_at, updated_at)
+      VALUES (?, ?, 'pending', ?, ?)
+    `);
+    stmt.run(cacheKey, argsKey, now, now);
+  }
+
+  /**
+   * Get all pending jobs for a cacheKey
+   */
+  async getPendingJobs<Args extends any[]>(
+    cacheKey: string
+  ): Promise<QueueEntry<Args>[]> {
+    await this.initialized;
+    const stmt = this.db.prepare(
+      `SELECT * FROM queue_entries WHERE cache_key = ? AND status = 'pending'`
+    );
+    const rows = stmt.all(cacheKey) as QueueEntry<Args>[];
+    return rows.map((row) => ({
+      ...row,
+      args: JSON.parse(row.args_key),
+      result: row.result ? JSON.parse(row.result) : undefined,
+    }));
+  }
+
+  /**
+   * Update a job with result or error
+   */
+  async updateJobResult<T>(
+    id: number,
+    result: T,
+    error?: string
+  ): Promise<void> {
+    await this.initialized;
+    const status = error ? "error" : "complete";
+    const now = Date.now();
+    const stmt = this.db.prepare(`
+      UPDATE queue_entries SET status = ?, result = ?, error = ?, updated_at = ? WHERE id = ?
+    `);
+    stmt.run(
+      status,
+      result ? JSON.stringify(result) : null,
+      error ?? null,
+      now,
+      id
+    );
+  }
+
+  /**
+   * Wrap a function to provide call, queue, and processQueue methods
+   */
+  wrapWithQueue<T, Args extends any[]>(
+    name: string,
+    fn: CacheableFunction<T, Args>,
+    version?: string
+  ): {
+    call: (...args: Args) => Promise<T>;
+    queue: (...args: Args) => Promise<void>;
+    processQueue: () => Promise<void>;
+  } {
+    const cacheKey = version ? `${name}:${version}` : name;
+    if (!cacheKey.includes(":")) {
+      throw new Error('Cache name must include a version, e.g. "myCache:0"');
+    }
+    const call = async (...args: Args): Promise<T> => {
+      return await this.wrap<T, Args>(name, fn, version)(...args);
+    };
+    const queue = async (...args: Args) => {
+      await this.queueJob(cacheKey, args);
+    };
+    const processQueue = async () => {
+      const jobs = await this.getPendingJobs<Args>(cacheKey);
+      for (const job of jobs) {
+        try {
+          const result = await fn(...job.args);
+          // Update both the queue entry and the cache
+          await this.updateJobResult(job.id, result);
+          // Also cache the result for normal cache lookup
+          await this.set(`${cacheKey}:${job.args_key}`, result);
+        } catch (e: any) {
+          await this.updateJobResult(job.id, undefined, String(e));
+        }
+      }
+    };
+    return { call, queue, processQueue };
   }
 }

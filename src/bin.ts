@@ -112,16 +112,7 @@ const installResult = await Bun.spawn(installCommand, {
 const hasPlaywright = await checkPlaywright();
 console.log("Has global Playwright installation:", hasPlaywright);
 
-// Open VS Code and change directory
 try {
-  // Open VS Code (or Cursor if aliased) from the specific directory
-  await Bun.spawn(["zsh", "-ic", "code ."], {
-    stdout: "inherit",
-    stderr: "inherit",
-    env: process.env,
-    cwd: projectDir,
-  });
-
   // Copy commands to clipboard
   const commands = `cd ${projectDir}\nbun run --watch index.ts`;
   await import("clipboardy").then((clipboardy) =>

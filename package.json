@@ -7,6 +7,9 @@
     "rumrunner": "./src/bin.ts",
     "rumrunner-dev": "./src/rumrunner-dev.ts"
   },
+  "scripts": {
+    "check": "tsc --noEmit"
+  },
   "files": [
     "src"
   ],
@@ -26,6 +29,8 @@
   "dependencies": {
     "@vitejs/plugin-react": "^4.5.0",
     "clipboardy": "^4.0.0",
+    "esbuild": "^0.25.5",
+    "hono": "^4.7.10",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "temp-dir": "^3.0.0",
