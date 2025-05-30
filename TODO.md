@@ -21,7 +21,8 @@ Rumrunner aims to make large-scale, repeatable, and explorable function evaluati
 
 ### Core: Hosted Server & UI
 - [x] Implement Hono (or similar) server that starts from the consuming app's main file
-- [ ] Serve the Rumrunner UI (interior to the package) from the server
+- [x] Serve the Rumrunner UI (interior to the package) from the server
+- [x] Set up our initial script to use the queue-ing version
 - [ ] Expose API endpoints for:
   - [ ] Listing available functions (from the consuming app)
   - [ ] Queuing jobs for execution

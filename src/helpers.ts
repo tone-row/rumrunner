@@ -1,8 +1,8 @@
-export const initialScript = `import { FileSQLiteCache, product, rumrunnerServer } from "rumrunner";
-// import { chromium } from "@playwright/test";
-// import { generateObject } from "ai";
-// import { createOpenRouter } from "@openrouter/ai-sdk-provider";
-// import { z } from "zod";
+export const initialScript = `import { FileSQLiteCache, product, rumrunnerServer } from \"rumrunner\";
+// import { chromium } from \"@playwright/test\";
+// import { generateObject } from \"ai\";
+// import { createOpenRouter } from \"@openrouter/ai-sdk-provider\";
+// import { z } from \"zod\";
 // import { createOllama } from 'ollama-ai-provider';
 
 // const ollama = createOllama({
@@ -11,22 +11,32 @@ export const initialScript = `import { FileSQLiteCache, product, rumrunnerServer
 // });
 
 // Initialize Cache
-const cache = new FileSQLiteCache("./cache.db");
+const cache = new FileSQLiteCache(\"./cache.db\");
 
 // Example: Use product to generate parameter combinations
-const names = new Set(["John", "Jane", "Jim", "Jill", "Jason", "Jenny"]);
-const greetings = new Set(["Hello", "Hi", "Hey"]);
+const names = new Set([\"John\", \"Jane\", \"Jim\", \"Jill\", \"Jason\", \"Jenny\"]);
+const greetings = new Set([\"Hello\", \"Hi\", \"Hey\"]);
 const combos = product({ name: names, greeting: greetings });
 
-const cowSay = cache.wrap("cowSay:0", async (name, greeting) => {
-  return \`Cow: - \${greeting}, \${name}!\`;
-});
+const cowSay = cache.wrapWithQueue(
+  \"cowSay:0\",
+  async (name, greeting) => {
+    return \`Cow: - \${greeting}, \${name}!\`;
+  }
+);
 
 (async () => {
+  // Queue all jobs
   for (const { name, greeting } of combos) {
-    const cow = await cowSay(name, greeting);
-    console.log(cow);
+    await cowSay.queue(name, greeting);
   }
+
+  // Process the queue (run all pending jobs)
+  await cowSay.processQueue();
+
+  // Optionally, call directly (bypasses queue)
+  // const result = await cowSay.call(\"John\", \"Hello\");
+  // console.log(result);
 })();
 
 export default rumrunnerServer();
@@ -36,7 +46,7 @@ export default rumrunnerServer();
 //   apiKey: process.env.OPENROUTER_API_KEY,
 // });
 
-// const loadHTML = cache.wrap("loadHTML:0", async (url) => {
+// const loadHTML = cache.wrapWithQueue(\"loadHTML:0\", async (url) => {
 //   const browser = await chromium.launch();
 //   const page = await browser.newPage();
 //   await page.goto(url);
@@ -45,15 +55,15 @@ export default rumrunnerServer();
 //   return html;
 // });
 
-// const getPageTitle = cache.wrap("getPageTitle:0", async (html) => {
+// const getPageTitle = cache.wrapWithQueue(\"getPageTitle:0\", async (html) => {
 //   const { object } = await generateObject({
-//     model: openrouter("claude-3-5-sonnet-latest"),
+//     model: openrouter(\"claude-3-5-sonnet-latest\"),
 //     schema: z.object({
 //       title: z.string(),
 //     }),
 //     messages: [
 //       {
-//         role: "user",
+//         role: \"user\",
 //         content: \`Extract the title of the page from the following HTML: \${html}\`,
 //       },
 //     ],
@@ -61,7 +71,9 @@ export default rumrunnerServer();
 //   return object.title;
 // });
 
-// const google = await loadHTML("https://google.com");
-// const title = await getPageTitle(google);
-// console.log(title);
+// await loadHTML.queue(\"https://google.com\");
+// await loadHTML.processQueue();
+// await getPageTitle.queue(\"<html>...</html>\");
+// await getPageTitle.processQueue();
+// console.log(await getPageTitle.call(\"<html>...</html>\"));
 `;
