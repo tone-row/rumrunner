@@ -6,3 +6,4 @@ export { Cache } from "./cache/base";
 export { SingleJsonCache } from "./cache/json-cache";
 export { FileSQLiteCache } from "./cache/file-sqlite-cache";
 export { product } from "./product";
+export { rumrunnerServer, registerFunction, setCache } from "./rumrunnerServer";
