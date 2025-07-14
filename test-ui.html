@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>UI Test</title>
+  </head>
+  <body>
+    <h1>Testing UI API calls</h1>
+    <div id="jobs"></div>
+    <div id="functions"></div>
+
+    <script>
+      async function testAPI() {
+        try {
+          // Test jobs API
+          const jobsRes = await fetch("/api/jobs");
+          const jobsData = await jobsRes.json();
+          document.getElementById("jobs").innerHTML =
+            "<h2>Jobs:</h2><pre>" +
+            JSON.stringify(jobsData, null, 2) +
+            "</pre>";
+
+          // Test functions API
+          const functionsRes = await fetch("/api/functions");
+          const functionsData = await functionsRes.json();
+          document.getElementById("functions").innerHTML =
+            "<h2>Functions:</h2><pre>" +
+            JSON.stringify(functionsData, null, 2) +
+            "</pre>";
+        } catch (error) {
+          document.body.innerHTML += "<p>Error: " + error.message + "</p>";
+        }
+      }
+
+      testAPI();
+    </script>
+  </body>
+</html>

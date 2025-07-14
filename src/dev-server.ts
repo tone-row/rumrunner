@@ -1,26 +1,54 @@
-import { createServer } from "vite";
-import { resolve } from "path";
-import { rumrunnerPlugin } from "./ui/vite-plugin-rumrunner";
+import { Hono } from "hono";
+import { serveStatic } from "hono/bun";
+import { join, dirname } from "path";
 
-export async function startDevServer() {
-  // Serve the UI from the package's src/ui directory
-  const uiRoot = resolve(__dirname, "./ui");
+export function devServer(apiPort: number = 3000, uiPort: number = 5173) {
+  console.log("Starting Rumrunner development server...");
 
-  const server = await createServer({
-    root: uiRoot,
-    plugins: [rumrunnerPlugin()],
-    server: {
-      hmr: true,
-      open: true,
-    },
-    optimizeDeps: {
-      include: ["react", "react-dom"],
-    },
+  const app = new Hono();
+
+  // Proxy API calls to the main server
+  app.use("/api/*", async (c) => {
+    const url = new URL(c.req.url);
+    const apiUrl = `http://localhost:${apiPort}${url.pathname}${url.search}`;
+
+    try {
+      const response = await fetch(apiUrl, {
+        method: c.req.method,
+        headers: c.req.header(),
+        body: c.req.raw.body,
+      });
+
+      return new Response(response.body, {
+        status: response.status,
+        headers: response.headers,
+      });
+    } catch (error) {
+      console.error("API proxy error:", error);
+      return c.json({ error: "API server not available" }, 503);
+    }
   });
 
-  await server.listen();
-  const info = server.config.server;
-  console.log(
-    `🚀 Rumrunner dev server running at: http://localhost:${info.port}`
+  // Serve static assets for development
+  const uiDist = join(dirname(new URL(import.meta.url).pathname), "ui", "dist");
+
+  app.use(
+    "/*",
+    serveStatic({
+      root: uiDist,
+      rewriteRequestPath: (path) => (path === "/" ? "/index.html" : path),
+    })
   );
+
+  // Start the development server
+  console.log(`🚀 Rumrunner dev server starting on port ${uiPort}...`);
+  console.log(`📡 Proxying API calls to http://localhost:${apiPort}`);
+  console.log(`🌐 UI available at http://localhost:${uiPort}`);
+
+  Bun.serve({
+    port: uiPort,
+    fetch: app.fetch,
+  });
+
+  console.log(`✅ Rumrunner dev server running at http://localhost:${uiPort}`);
 }

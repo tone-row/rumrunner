@@ -25,6 +25,8 @@ export function setCache(cache: any) {
 }
 
 export function rumrunnerServer(port: number = 3000) {
+  console.log("Starting Rumrunner server...");
+
   const app = new Hono();
 
   // Healthcheck

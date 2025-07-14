@@ -7,9 +7,16 @@ export default defineConfig({
   build: {
     outDir: "dist",
     emptyOutDir: true,
-    rollupOptions: {
-      // input block removed
-    },
   },
   plugins: [react(), tailwindcss()],
+  server: {
+    port: 5173,
+    hmr: true,
+    watch: {
+      usePolling: true,
+    },
+  },
+  preview: {
+    port: 4173,
+  },
 });

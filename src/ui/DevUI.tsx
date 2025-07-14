@@ -1,13 +1,21 @@
 import React, { useEffect, useState } from "react";
 
 export function DevUI() {
-  const [cacheData, setCacheData] = useState<any>(null);
+  const [jobs, setJobs] = useState<any>(null);
+  const [fns, setFns] = useState<any>(null);
 
   useEffect(() => {
-    fetch("/__rumrunner")
+    fetch("/api/functions")
       .then((res) => res.json())
-      .then(setCacheData)
-      .catch(() => setCacheData(null));
+      .then((data) => setFns(data.functions)) // Extract functions array from response
+      .catch(() => setFns(null));
+  }, []);
+
+  useEffect(() => {
+    fetch("/api/jobs")
+      .then((res) => res.json())
+      .then((data) => setJobs(data.jobs)) // Extract jobs array from response
+      .catch(() => setJobs(null));
   }, []);
 
   return (
@@ -17,13 +25,24 @@ export function DevUI() {
       </h2>
 
       <div className="w-full bg-white rounded-xl shadow-lg p-6">
-        {cacheData ? (
+        {jobs ? (
           <pre className="bg-gray-100 text-sm rounded-lg p-4 overflow-x-auto border border-gray-200">
-            {JSON.stringify(cacheData, null, 2)}
+            {JSON.stringify(jobs, null, 2)}
           </pre>
         ) : (
           <div className="text-gray-500 text-center py-8">
-            Loading or no cache data found.
+            Loading or no jobs found.
+          </div>
+        )}
+      </div>
+      <div className="w-full bg-white rounded-xl shadow-lg p-6">
+        {fns ? (
+          <pre className="bg-gray-100 text-sm rounded-lg p-4 overflow-x-auto border border-gray-200">
+            {JSON.stringify(fns, null, 2)}
+          </pre>
+        ) : (
+          <div className="text-gray-500 text-center py-8">
+            Loading or no functions found.
           </div>
         )}
       </div>

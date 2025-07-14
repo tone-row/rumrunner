@@ -1,0 +1,148 @@
+---
+description: "Rumrunner debugging patterns, architecture insights, and common issues"
+alwaysApply: true
+---
+
+# Rumrunner Debugging & Architecture Guide
+
+## Core Architecture Insights
+
+### Server-Client Separation Pattern
+
+Rumrunner uses a **two-process architecture** for debugging:
+
+- **Main Process**: Runs your business logic, queues jobs, registers functions
+- **Server Process**: Serves the UI and API endpoints separately
+
+**Critical**: Never run `rumrunnerServer()` in the same process as your test/debug code - it will hang!
+
+### API Response Structure Pattern
+
+The server APIs return **wrapped objects**, not direct arrays:
+
+- `/api/jobs` returns `{ jobs: [...] }`
+- `/api/functions` returns `{ functions: [...] }`
+- The UI must extract these properties: `data.jobs` and `data.functions`
+
+### Cache Integration Pattern
+
+The cache must be explicitly made available to the server:
+
+```typescript
+const cache = new FileSQLiteCache("./cache.db");
+setCache(cache); // <-- CRITICAL: Makes cache available to server
+```
+
+## Debugging Workflow
+
+### 1. Test API Endpoints First
+
+Always verify APIs work before debugging UI:
+
+```bash
+curl http://localhost:3000/api/jobs | jq
+curl http://localhost:3000/api/functions | jq
+```
+
+### 2. Separate Process Testing
+
+For debugging, use separate files:
+
+- `test-server.ts` - Standalone server with your logic
+- `debug-test.ts` - Client that spawns server process and tests APIs
+
+### 3. UI Rebuild Required
+
+After changing `src/ui/DevUI.tsx`:
+
+```bash
+bun run build:ui
+```
+
+## Common Issues & Solutions
+
+### Issue: "No jobs listed in UI"
+
+**Root Cause**: UI expects direct arrays, API returns wrapped objects
+**Solution**: Update DevUI to extract properties:
+
+```typescript
+.then((data) => setJobs(data.jobs))
+.then((data) => setFns(data.functions))
+```
+
+### Issue: "Server hangs when starting"
+
+**Root Cause**: Running server in same process as test code
+**Solution**: Use `spawn()` to start server in separate process
+
+### Issue: "Jobs disappear after processing"
+
+**Root Cause**: `processQueue()` completes jobs, changing status from "pending" to "complete"
+**Solution**: Check job status or delay processing to see pending jobs
+
+### Issue: "Port 3000 in use"
+
+**Root Cause**: Previous server process still running
+**Solution**:
+
+```bash
+lsof -i :3000
+kill <PID>
+```
+
+## Key Files & Their Roles
+
+- `src/rumrunnerServer.ts` - Main server with API endpoints
+- `src/ui/DevUI.tsx` - React UI component (must be rebuilt after changes)
+- `src/cache/file-sqlite-cache.ts` - Cache implementation with queue system
+- `src/ui/dist/` - Built UI assets served by server
+
+## Testing Patterns
+
+### API Testing
+
+```bash
+# Test endpoints directly
+curl http://localhost:3000/api/jobs
+curl http://localhost:3000/api/functions
+```
+
+### UI Testing
+
+```bash
+# Rebuild UI after changes
+bun run build:ui
+
+# Check if UI is served
+curl http://localhost:3000/
+```
+
+### Process Management
+
+```bash
+# Check what's using port 3000
+lsof -i :3000
+
+# Kill process if needed
+kill <PID>
+```
+
+## Development Workflow
+
+1. **Write your logic** in main file (queue jobs, register functions)
+2. **Call `setCache()`** to make cache available to server
+3. **Start server** with `rumrunnerServer()`
+4. **Test APIs** directly with curl
+5. **Check UI** at http://localhost:3000
+6. **Debug UI** by rebuilding after changes
+
+## Architecture Principles
+
+- **Separation of Concerns**: Business logic separate from UI serving
+- **Explicit Cache Sharing**: Cache must be explicitly shared with server
+- **Wrapped API Responses**: All APIs return objects, not direct arrays
+- **Process Isolation**: Server runs in separate process for debugging
+- **UI Rebuild Required**: Changes to UI components require rebuild
+
+This pattern ensures reliable debugging and clear separation between the function evaluation logic and the UI/API serving infrastructure.
