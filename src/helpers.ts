@@ -31,7 +31,8 @@ registerFunction({
   name: "cowSay",
   description: "Greets a person with a cow.",
   params: { name: "string", greeting: "string" },
-  version: "0"
+  version: "0",
+  processQueue: () => cowSay.processQueue()
 });
 
 (async () => {
@@ -41,7 +42,7 @@ registerFunction({
   }
 
   // Process the queue (run all pending jobs)
-  await cowSay.processQueue();
+  // await cowSay.processQueue(); // Commented out - let UI control execution
 
   // Optionally, call directly (bypasses queue)
   // const result = await cowSay.call("John", "Hello");

@@ -1,3 +1,96 @@
+---
+alwaysApply: true
+---
+
+# Rumrunner UI Debugging Patterns
+
+## The API Response Structure Issue
+
+**Critical Discovery**: The UI expects direct arrays, but APIs return wrapped objects.
+
+### API Response Format
+
+```typescript
+// What the APIs actually return:
+{
+  jobs: [...],
+  functions: [...]
+}
+
+// What the UI was expecting:
+[...]
+```
+
+### Fix for DevUI.tsx
+
+```typescript
+// INCORRECT (causes "no jobs listed"):
+.then(setJobs)
+.then(setFns)
+
+// CORRECT (extracts the data):
+.then((data) => setJobs(data.jobs))
+.then((data) => setFns(data.functions))
+```
+
+## UI Development Workflow
+
+### 1. Always Rebuild After Changes
+
+```bash
+bun run build:ui
+```
+
+### 2. Test APIs First
+
+```bash
+curl http://localhost:3000/api/jobs | jq
+curl http://localhost:3000/api/functions | jq
+```
+
+### 3. Check UI Serving
+
+```bash
+curl http://localhost:3000/
+```
+
+## Common UI Debugging Issues
+
+### Issue: "Loading or no jobs found"
+
+**Check**:
+
+1. API endpoint returns data: `curl http://localhost:3000/api/jobs`
+2. UI is rebuilt: `bun run build:ui`
+3. Response structure matches UI expectations
+
+### Issue: "UI shows empty data"
+
+**Check**:
+
+1. `setCache(cache)` was called in server code
+2. Functions are registered with `registerFunction()`
+3. Jobs are queued before server starts
+
+### Issue: "UI not updating after changes"
+
+**Solution**: Rebuild UI after any changes to `src/ui/DevUI.tsx`
+
+## Key Files for UI Debugging
+
+- `src/ui/DevUI.tsx` - Main UI component (must rebuild after changes)
+- `src/ui/dist/` - Built assets served by server
+- `src/rumrunnerServer.ts` - API endpoints that UI calls
+
+## Testing UI Changes
+
+1. Make changes to `src/ui/DevUI.tsx`
+2. Run `bun run build:ui`
+3. Restart server if needed
+4. Check `http://localhost:3000`
+
+This pattern ensures the UI correctly displays the queued jobs and registered functions from the Rumrunner server.
+
 # Rumrunner UI Debugging Patterns
 
 ## The API Response Structure Issue

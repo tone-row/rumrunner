@@ -8,9 +8,10 @@ export type RegisteredFunction = {
   description?: string;
   params?: Record<string, any>;
   version?: string;
+  processQueue?: () => Promise<void>;
 };
 
-// In-memory store for registered functions
+// In-memory store for registered functions with their processQueue methods
 const registeredFunctions: RegisteredFunction[] = [];
 
 // Optionally, allow passing a cache instance for job listing
@@ -48,17 +49,66 @@ export function rumrunnerServer(port: number = 3000) {
     const fn = c.req.query("function");
     let jobs = [];
     if (fn) {
-      // Try to get jobs for a specific function (by cache key prefix)
-      jobs = await globalCache.getPendingJobs(fn);
+      // Get all jobs for a specific function (by cache key prefix)
+      jobs = await globalCache.getAllJobs(fn);
     } else {
-      // Not efficient: for demo, get jobs for all registered functions
+      // Get all jobs for all registered functions
       jobs = [];
       for (const f of registeredFunctions) {
         const key = f.version ? `${f.name}:${f.version}` : f.name;
-        const fnJobs = await globalCache.getPendingJobs(key);
+        const fnJobs = await globalCache.getAllJobs(key);
         jobs.push(...fnJobs);
       }
     }
+    return c.json({ jobs });
+  });
+
+  // API: Run jobs for a specific function
+  app.post("/api/jobs/run", async (c: Context) => {
+    const { functionName } = await c.req.json();
+
+    if (!functionName) {
+      return c.json({ error: "functionName is required" }, 400);
+    }
+
+    const func = registeredFunctions.find((f) => f.name === functionName);
+    if (!func || !func.processQueue) {
+      return c.json(
+        {
+          error: `Function ${functionName} not found or has no processQueue method`,
+        },
+        404
+      );
+    }
+
+    try {
+      await func.processQueue();
+      return c.json({
+        success: true,
+        message: `Jobs for ${functionName} processed successfully`,
+      });
+    } catch (error) {
+      return c.json(
+        { error: `Failed to process jobs for ${functionName}: ${error}` },
+        500
+      );
+    }
+  });
+
+  // API: Get job status (for polling)
+  app.get("/api/jobs/status", async (c: Context) => {
+    if (!globalCache) {
+      return c.json({ jobs: [], error: "No cache instance set." }, 500);
+    }
+
+    const functionName = c.req.query("function");
+    if (!functionName) {
+      return c.json({ error: "function parameter is required" }, 400);
+    }
+
+    const key = functionName.includes(":") ? functionName : `${functionName}:1`; // Default version
+    const jobs = await globalCache.getPendingJobs(key);
+
     return c.json({ jobs });
   });
 

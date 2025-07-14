@@ -279,6 +279,24 @@ export class FileSQLiteCache implements ICache {
   }
 
   /**
+   * Get all jobs for a cacheKey (any status)
+   */
+  async getAllJobs<Args extends any[]>(
+    cacheKey: string
+  ): Promise<QueueEntry<Args>[]> {
+    await this.initialized;
+    const stmt = this.db.prepare(
+      `SELECT * FROM queue_entries WHERE cache_key = ? ORDER BY created_at ASC`
+    );
+    const rows = stmt.all(cacheKey) as QueueEntry<Args>[];
+    return rows.map((row) => ({
+      ...row,
+      args: JSON.parse(row.args_key),
+      result: row.result ? JSON.parse(row.result) : undefined,
+    }));
+  }
+
+  /**
    * Wrap a function to provide call, queue, and processQueue methods
    */
   wrapWithQueue<T, Args extends any[]>(
