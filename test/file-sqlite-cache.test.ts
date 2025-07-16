@@ -172,4 +172,38 @@ describe("FileSQLiteCache", () => {
       results: ["test-2-all"],
     });
   });
+
+  test("runJob executes a pending job and updates status", async () => {
+    const fn = async (x: number) => x * 2;
+    const wrapped = cache.wrapWithQueue("double:1", fn);
+    await wrapped.queue(5);
+    // Get the job ID
+    const jobs = await cache.getAllJobs("double:1");
+    expect(jobs.length).toBe(1);
+    const job = jobs[0];
+    expect(job.status).toBe("pending");
+    // Run the job
+    const result = await cache.runJob(job.id, fn);
+    expect(result).toBe(10);
+    // Check job status is now complete
+    const updated = (await cache.getAllJobs("double:1"))[0];
+    expect(updated.status).toBe("complete");
+    expect(updated.result).toBe(10);
+  });
+
+  test("runJob throws if job is not pending", async () => {
+    const fn = async (x: number) => x + 1;
+    const wrapped = cache.wrapWithQueue("inc:1", fn);
+    await wrapped.queue(1);
+    const job = (await cache.getAllJobs("inc:1"))[0];
+    // Run once to complete
+    await cache.runJob(job.id, fn);
+    // Try to run again
+    await expect(cache.runJob(job.id, fn)).rejects.toThrow(/not pending/);
+  });
+
+  test("runJob throws if job does not exist", async () => {
+    const fn = async (x: number) => x;
+    await expect(cache.runJob(999999, fn)).rejects.toThrow(/not found/);
+  });
 });

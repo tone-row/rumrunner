@@ -30,6 +30,13 @@ registerFunction({
   params: { name: "string", greeting: "string" },
   version: "0",
   processQueue: () => cowSay.processQueue(),
+  fn: async (name, greeting) => {
+    // Simulate some work
+    await new Promise((resolve) =>
+      setTimeout(resolve, 1000 + Math.random() * 2000)
+    );
+    return `Cow: - ${greeting}, ${name}!`;
+  },
 });
 
 // Add another function for variety
@@ -58,6 +65,21 @@ registerFunction({
   params: { a: "number", b: "number", operation: "string" },
   version: "0",
   processQueue: () => mathFunction.processQueue(),
+  fn: async (a: number, b: number, operation: string) => {
+    await new Promise((resolve) =>
+      setTimeout(resolve, 500 + Math.random() * 1000)
+    );
+    switch (operation) {
+      case "add":
+        return a + b;
+      case "multiply":
+        return a * b;
+      case "subtract":
+        return a - b;
+      default:
+        throw new Error(`Unknown operation: ${operation}`);
+    }
+  },
 });
 
 (async () => {

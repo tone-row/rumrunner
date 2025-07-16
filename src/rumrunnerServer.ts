@@ -9,6 +9,7 @@ export type RegisteredFunction = {
   params?: Record<string, any>;
   version?: string;
   processQueue?: () => Promise<void>;
+  fn?: (...args: any[]) => Promise<any>; // The actual function implementation
 };
 
 // In-memory store for registered functions with their processQueue methods
@@ -37,7 +38,9 @@ export function rumrunnerServer(port: number = 3000) {
 
   // API: List registered functions
   app.get("/api/functions", (c: Context) => {
-    return c.json({ functions: registeredFunctions });
+    // Return functions without the fn property (which can't be serialized)
+    const functionsForUI = registeredFunctions.map(({ fn, ...rest }) => rest);
+    return c.json({ functions: functionsForUI });
   });
 
   // API: List queued jobs (all or by function)
@@ -112,6 +115,148 @@ export function rumrunnerServer(port: number = 3000) {
     return c.json({ jobs });
   });
 
+  // API: Delete a specific job
+  app.delete("/api/jobs/:id", async (c: Context) => {
+    if (!globalCache) {
+      return c.json({ error: "No cache instance set." }, 500);
+    }
+
+    const id = parseInt(c.req.param("id"));
+    if (isNaN(id)) {
+      return c.json({ error: "Invalid job ID" }, 400);
+    }
+
+    try {
+      await globalCache.deleteJob(id);
+      return c.json({
+        success: true,
+        message: `Job ${id} deleted successfully`,
+      });
+    } catch (error) {
+      return c.json({ error: `Failed to delete job ${id}: ${error}` }, 500);
+    }
+  });
+
+  // API: Delete jobs for a function and specific arguments
+  app.delete("/api/jobs", async (c: Context) => {
+    if (!globalCache) {
+      return c.json({ error: "No cache instance set." }, 500);
+    }
+
+    const { functionName, args } = await c.req.json();
+    if (!functionName) {
+      return c.json({ error: "functionName is required" }, 400);
+    }
+
+    const key = functionName.includes(":") ? functionName : `${functionName}:0`;
+
+    try {
+      if (args) {
+        await globalCache.deleteJobs(key, args);
+        return c.json({
+          success: true,
+          message: `Jobs for ${functionName} with args ${JSON.stringify(
+            args
+          )} deleted successfully`,
+        });
+      } else {
+        await globalCache.deleteAllJobs(key);
+        return c.json({
+          success: true,
+          message: `All jobs for ${functionName} deleted successfully`,
+        });
+      }
+    } catch (error) {
+      return c.json(
+        { error: `Failed to delete jobs for ${functionName}: ${error}` },
+        500
+      );
+    }
+  });
+
+  // API: Requeue a job (delete and recreate)
+  app.post("/api/jobs/requeue", async (c: Context) => {
+    if (!globalCache) {
+      return c.json({ error: "No cache instance set." }, 500);
+    }
+
+    const { functionName, args } = await c.req.json();
+    if (!functionName || !args) {
+      return c.json({ error: "functionName and args are required" }, 400);
+    }
+
+    const key = functionName.includes(":") ? functionName : `${functionName}:0`;
+
+    try {
+      await globalCache.requeueJob(key, args);
+      return c.json({
+        success: true,
+        message: `Job for ${functionName} with args ${JSON.stringify(
+          args
+        )} requeued successfully`,
+      });
+    } catch (error) {
+      return c.json(
+        { error: `Failed to requeue job for ${functionName}: ${error}` },
+        500
+      );
+    }
+  });
+
+  // API: Run a single job by ID
+  app.post("/api/jobs/:id/run", async (c: Context) => {
+    if (!globalCache) {
+      return c.json({ error: "No cache instance set." }, 500);
+    }
+
+    const id = parseInt(c.req.param("id"));
+    if (isNaN(id)) {
+      return c.json({ error: "Invalid job ID" }, 400);
+    }
+
+    try {
+      // Get all jobs to find the one with this ID
+      const allJobs = [];
+      for (const f of registeredFunctions) {
+        const key = f.version ? `${f.name}:${f.version}` : f.name;
+        const fnJobs = await globalCache.getAllJobs(key);
+        allJobs.push(...fnJobs);
+      }
+
+      const job = allJobs.find((j: any) => j.id === id);
+
+      if (!job) {
+        return c.json({ error: `Job ${id} not found` }, 404);
+      }
+
+      // Extract function name from cache_key (e.g., "myFunction:1.0" -> "myFunction")
+      const functionName = job.cache_key.split(":")[0];
+      const func = registeredFunctions.find((f) => f.name === functionName);
+
+      if (!func) {
+        return c.json({ error: `Function ${functionName} not found` }, 404);
+      }
+
+      // Run the job using the cache's runJob method
+      if (!func.fn) {
+        return c.json(
+          { error: `Function ${functionName} has no implementation stored` },
+          400
+        );
+      }
+
+      const result = await globalCache.runJob(id, func.fn);
+
+      return c.json({
+        success: true,
+        message: `Job ${id} executed successfully`,
+        result,
+      });
+    } catch (error) {
+      return c.json({ error: `Failed to run job ${id}: ${error}` }, 500);
+    }
+  });
+
   // Resolve absolute path to UI build output
   const uiDist = join(dirname(new URL(import.meta.url).pathname), "ui", "dist");
 
@@ -128,10 +273,15 @@ export function rumrunnerServer(port: number = 3000) {
   // Redirect /ui to /ui/index.html (for direct /ui route)
   app.get("/ui", (c) => c.redirect("/ui/index.html"));
 
-  // Optionally, serve index.html for / (default UI)
-  app.get("/", async (c) =>
-    c.html(await Bun.file(join(uiDist, "index.html")).text())
-  );
+  // Fallback for client-side routing - serve index.html for any non-API route
+  app.get("*", async (c) => {
+    // Skip API routes
+    if (c.req.path.startsWith("/api/")) {
+      return c.notFound();
+    }
+    // Serve index.html for all other routes to enable client-side routing
+    return c.html(await Bun.file(join(uiDist, "index.html")).text());
+  });
 
   // Start the server
   console.log(`🚀 Rumrunner server starting on port ${port}...`);

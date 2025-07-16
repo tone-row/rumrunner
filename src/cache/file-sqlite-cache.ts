@@ -229,12 +229,29 @@ export class FileSQLiteCache implements ICache {
   ): Promise<void> {
     await this.initialized;
     const argsKey = JSON.stringify(args);
+
+    // Check if a job with the same cache_key and args_key already exists
+    const existingStmt = this.db.prepare(
+      `SELECT id FROM queue_entries WHERE cache_key = ? AND args_key = ?`
+    );
+    const existing = existingStmt.get(cacheKey, argsKey) as {
+      id: number;
+    } | null;
+
+    if (existing) {
+      debug(
+        `Job already exists for ${cacheKey} with args: ${argsKey}, skipping`
+      );
+      return;
+    }
+
     const now = Date.now();
     const stmt = this.db.prepare(`
       INSERT INTO queue_entries (cache_key, args_key, status, created_at, updated_at)
       VALUES (?, ?, 'pending', ?, ?)
     `);
     stmt.run(cacheKey, argsKey, now, now);
+    debug(`Queued new job for ${cacheKey} with args: ${argsKey}`);
   }
 
   /**
@@ -279,6 +296,45 @@ export class FileSQLiteCache implements ICache {
   }
 
   /**
+   * Run a single job by ID
+   */
+  async runJob<T, Args extends any[]>(
+    id: number,
+    fn: CacheableFunction<T, Args>
+  ): Promise<T> {
+    await this.initialized;
+
+    // Get the job details
+    const stmt = this.db.prepare(`SELECT * FROM queue_entries WHERE id = ?`);
+    const job = stmt.get(id) as QueueEntry<Args> | null;
+
+    if (!job) {
+      throw new Error(`Job with ID ${id} not found`);
+    }
+
+    if (job.status !== "pending") {
+      throw new Error(`Job ${id} is not pending (status: ${job.status})`);
+    }
+
+    try {
+      const args = JSON.parse(job.args_key);
+      const result = await fn(...args);
+
+      // Update the job with the result
+      await this.updateJobResult(id, result);
+
+      // Also cache the result for normal cache lookup
+      const cacheKey = job.cache_key;
+      await this.set(`${cacheKey}:${job.args_key}`, result);
+
+      return result;
+    } catch (e: any) {
+      await this.updateJobResult(id, undefined, String(e));
+      throw e;
+    }
+  }
+
+  /**
    * Get all jobs for a cacheKey (any status)
    */
   async getAllJobs<Args extends any[]>(
@@ -297,6 +353,57 @@ export class FileSQLiteCache implements ICache {
   }
 
   /**
+   * Delete a specific job by ID
+   */
+  async deleteJob(id: number): Promise<void> {
+    await this.initialized;
+    const stmt = this.db.prepare(`DELETE FROM queue_entries WHERE id = ?`);
+    stmt.run(id);
+    debug(`Deleted job ${id}`);
+  }
+
+  /**
+   * Delete all jobs for a cacheKey and args combination
+   */
+  async deleteJobs<Args extends any[]>(
+    cacheKey: string,
+    args: Args
+  ): Promise<void> {
+    await this.initialized;
+    const argsKey = JSON.stringify(args);
+    const stmt = this.db.prepare(
+      `DELETE FROM queue_entries WHERE cache_key = ? AND args_key = ?`
+    );
+    stmt.run(cacheKey, argsKey);
+    debug(`Deleted jobs for ${cacheKey} with args: ${argsKey}`);
+  }
+
+  /**
+   * Delete all jobs for a cacheKey
+   */
+  async deleteAllJobs(cacheKey: string): Promise<void> {
+    await this.initialized;
+    const stmt = this.db.prepare(
+      `DELETE FROM queue_entries WHERE cache_key = ?`
+    );
+    stmt.run(cacheKey);
+    debug(`Deleted all jobs for ${cacheKey}`);
+  }
+
+  /**
+   * Force requeue a job (delete existing and create new)
+   */
+  async requeueJob<Args extends any[]>(
+    cacheKey: string,
+    args: Args
+  ): Promise<void> {
+    await this.initialized;
+    await this.deleteJobs(cacheKey, args);
+    await this.queueJob(cacheKey, args);
+    debug(`Requeued job for ${cacheKey} with args: ${JSON.stringify(args)}`);
+  }
+
+  /**
    * Wrap a function to provide call, queue, and processQueue methods
    */
   wrapWithQueue<T, Args extends any[]>(
@@ -306,7 +413,12 @@ export class FileSQLiteCache implements ICache {
   ): {
     call: (...args: Args) => Promise<T>;
     queue: (...args: Args) => Promise<void>;
+    requeue: (...args: Args) => Promise<void>;
     processQueue: () => Promise<void>;
+    runJob: (id: number) => Promise<T>;
+    deleteJob: (id: number) => Promise<void>;
+    deleteJobs: (args: Args) => Promise<void>;
+    deleteAllJobs: () => Promise<void>;
   } {
     const cacheKey = version ? `${name}:${version}` : name;
     if (!cacheKey.includes(":")) {
@@ -317,6 +429,9 @@ export class FileSQLiteCache implements ICache {
     };
     const queue = async (...args: Args) => {
       await this.queueJob(cacheKey, args);
+    };
+    const requeue = async (...args: Args) => {
+      await this.requeueJob(cacheKey, args);
     };
     const processQueue = async () => {
       const jobs = await this.getPendingJobs<Args>(cacheKey);
@@ -332,6 +447,27 @@ export class FileSQLiteCache implements ICache {
         }
       }
     };
-    return { call, queue, processQueue };
+    const deleteJob = async (id: number) => {
+      await this.deleteJob(id);
+    };
+    const deleteJobs = async (args: Args) => {
+      await this.deleteJobs(cacheKey, args);
+    };
+    const deleteAllJobs = async () => {
+      await this.deleteAllJobs(cacheKey);
+    };
+    const runJob = async (id: number): Promise<T> => {
+      return await this.runJob<T, Args>(id, fn);
+    };
+    return {
+      call,
+      queue,
+      requeue,
+      processQueue,
+      runJob,
+      deleteJob,
+      deleteJobs,
+      deleteAllJobs,
+    };
   }
 }
